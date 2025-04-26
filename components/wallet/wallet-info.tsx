@@ -72,7 +72,7 @@ export function WalletInfo() {
         <DropdownMenuItem>
           <ExternalLink className="h-4 w-4 mr-2" />
           <a 
-            href={`https://stellar.expert/explorer/public/account/${address}`} 
+            href={`https://stellar.expert/explorer/testnet/account/${address}`} 
             target="_blank" 
             rel="noopener noreferrer"
             className="w-full"
