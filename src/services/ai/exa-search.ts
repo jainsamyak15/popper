@@ -3,17 +3,23 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-const exa = new Exa(process.env.EXA_API_KEY!);
+// Ensure API key is available
+const exaApiKey = process.env.EXA_API_KEY;
+if (!exaApiKey) {
+  console.warn('Warning: EXA_API_KEY not found in environment variables');
+}
+
+const exa = new Exa(exaApiKey);
 
 export class ExaSearchAPI {
   static async search(query: string) {
     try {
-      const result = await exa.search(query, {
+      const results = await exa.search(query, {
         useAutoprompt: true,
         numResults: 10,
       });
 
-      return result.map((item: any) => ({
+      return results.results.map((item) => ({
         title: item.title,
         content: item.text,
         url: item.url,

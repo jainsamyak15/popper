@@ -9,6 +9,8 @@ pub enum DataKey {
     MarketCount,
     Resolution(u32),
     Position(Address, u32),
+    TotalVolume,
+    UserPositions(Address),
 }
 
 #[contracttype]
@@ -23,6 +25,8 @@ pub struct Market {
     pub end_time: u64,
     pub resolved: bool,
     pub outcome: bool,
+    pub volume: i128,
+    pub participants: u32,
 }
 
 #[contracttype]
@@ -30,6 +34,7 @@ pub struct Position {
     pub amount: i128,
     pub prediction: bool,
     pub claimed: bool,
+    pub entry_price: i128,
 }
 
 #[contract]
@@ -39,6 +44,7 @@ pub struct PredictionMarket;
 impl PredictionMarket {
     pub fn initialize(env: Env) {
         env.storage().instance().set(&DataKey::MarketCount, &0u32);
+        env.storage().instance().set(&DataKey::TotalVolume, &0i128);
     }
 
     pub fn create_market(
@@ -63,6 +69,8 @@ impl PredictionMarket {
             end_time,
             resolved: false,
             outcome: false,
+            volume: 0,
+            participants: 0,
         };
 
         env.storage().instance().set(&DataKey::Market(new_count), &market);
@@ -82,26 +90,53 @@ impl PredictionMarket {
         
         assert!(!market.resolved, "Market already resolved");
         assert!(env.ledger().timestamp() < market.end_time, "Market closed");
+        assert!(amount > 0, "Amount must be positive");
         
         // Transfer tokens from user to contract
         let token = env.token();
         token.transfer(&user, &env.current_contract_address(), &amount);
         
-        // Update market pools
+        // Calculate entry price based on current pools
+        let total_pool = market.yes_pool + market.no_pool;
+        let entry_price = if total_pool == 0 {
+            5000 // 50% if no liquidity
+        } else if prediction {
+            (market.yes_pool * 10000) / total_pool
+        } else {
+            (market.no_pool * 10000) / total_pool
+        };
+        
+        // Update market pools and stats
         if prediction {
             market.yes_pool += amount;
         } else {
             market.no_pool += amount;
         }
         
+        market.volume += amount;
+        market.participants += 1;
+        
+        // Update total volume
+        let total_volume: i128 = env.storage().instance().get(&DataKey::TotalVolume).unwrap();
+        env.storage().instance().set(&DataKey::TotalVolume, &(total_volume + amount));
+        
         // Store position
         let position = Position {
             amount,
             prediction,
             claimed: false,
+            entry_price,
         };
         
-        env.storage().instance().set(&DataKey::Position((user, market_id)), &position);
+        // Update user positions
+        let mut user_positions: Vec<u32> = env.storage()
+            .instance()
+            .get(&DataKey::UserPositions(user.clone()))
+            .unwrap_or(Vec::new(env));
+        user_positions.push_back(market_id);
+        
+        env.storage().instance().set(&DataKey::Position((user.clone(), market_id)), &position);
+        env.storage().instance().set(&DataKey::UserPositions(user), &user_positions);
         env.storage().instance().set(&DataKey::Market(market_id), &market);
     }
 
@@ -152,5 +187,20 @@ impl PredictionMarket {
         let mut position = position;
         position.claimed = true;
         env.storage().instance().set(&DataKey::Position((user, market_id)), &position);
+    }
+
+    pub fn get_market(env: &Env, market_id: u32) -> Market {
+        env.storage().instance().get(&DataKey::Market(market_id)).unwrap()
+    }
+
+    pub fn get_user_positions(env: &Env, user: Address) -> Vec<u32> {
+        env.storage()
+            .instance()
+            .get(&DataKey::UserPositions(user))
+            .unwrap_or(Vec::new(env))
+    }
+
+    pub fn get_total_volume(env: &Env) -> i128 {
+        env.storage().instance().get(&DataKey::TotalVolume).unwrap()
     }
 }

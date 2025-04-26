@@ -13,7 +13,7 @@ interface ConnectWalletButtonProps {
 export function ConnectWalletButton({ size = 'default' }: ConnectWalletButtonProps) {
   const { connect, isLoading } = useWallet();
   const [isHovered, setIsHovered] = useState(false);
-  
+
   return (
     <motion.div
       onHoverStart={() => setIsHovered(true)}

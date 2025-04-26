@@ -1,12 +1,13 @@
 import { Contract } from 'soroban-client';
-import { SorobanRpc, xdr } from 'stellar-sdk';
+import { Soroban, xdr } from 'stellar-sdk';
+import SorobanClient from 'stellar-sdk';
 import * as fs from 'fs';
 import * as path from 'path';
 
 async function deployContract() {
   try {
     // Initialize Soroban RPC client
-    const server = new SorobanRpc.Server(
+    const server = new SorobanClient(
       'https://soroban-testnet.stellar.org',
       { allowHttp: true }
     );
