@@ -1,152 +1,56 @@
 import { OpenAI } from 'openai';
-import { Crew } from 'crewai-js';
-import { ExaSearchAPI } from './exa-search';
-import { YahooFinanceAPI } from './yahoo-finance';
-import { TwitterAPI } from './twitter-api';
-import { GoogleTrendsAPI } from './google-trends';
+import { PrismCrew } from '../../../agent/agentic-prism/src/prism_crew';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
-// Initialize OpenAI with the new SDK
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
-});
-
-// Check for API key
-if (!process.env.OPENAI_API_KEY) {
-  console.warn('Warning: OPENAI_API_KEY not found in environment variables');
-}
-
-// Initialize Crew with consistent configuration
-const crew = new Crew({
-  agents: [
-    {
-      name: 'DataCollector',
-      role: 'Collects and verifies data from multiple sources',
-      goal: 'Gather accurate and reliable information from various sources',
-      tools: ['ExaSearchAPI', 'YahooFinanceAPI'],
-      llm: {
-        model: 'gpt-4-turbo',
-        temperature: 0.3,
-      },
-    },
-    {
-      name: 'MarketAnalyst',
-      role: 'Analyzes market data and trends',
-      goal: 'Analyze market data and provide accurate predictions',
-      tools: ['YahooFinanceAPI'],
-      llm: {
-        model: 'gpt-4-turbo',
-        temperature: 0.2,
-      },
-    },
-    {
-      name: 'TrendAnalyzer',
-      role: 'Analyzes social media trends and news',
-      goal: 'Identify trending topics and potential market opportunities',
-      tools: ['TwitterAPI', 'GoogleTrendsAPI'],
-      llm: {
-        model: 'gpt-4-turbo',
-        temperature: 0.4,
-      },
-    },
-  ],
 });
 
 export class ResolutionService {
   static async resolveMarket(marketId: string, marketData: any) {
     try {
-      const taskDescription = `Analyze and resolve the prediction market: ${marketData.title}`;
-      console.log('Task Description:', taskDescription);
+      // Initialize PrismCrew
+      const crew = new PrismCrew();
+      
+      // Create task for market resolution
+      const task = {
+        input_statement: marketData.title,
+      };
 
-      const dataCollector = crew.getAgent('DataCollector');
-      const marketAnalyst = crew.getAgent('MarketAnalyst');
+      // Run the crew analysis
+      const result = await crew.crew().kickoff(task);
 
-      const [searchResults, financialData] = await Promise.all([
-        dataCollector.execute('searchRelevantData', { query: marketData.title }),
-        dataCollector.execute('getFinancialData', { query: marketData.title }),
-      ]);
+      // Parse crew results
+      const outcome = result.includes('VERDICT: TRUE');
+      const confidenceMatch = result.match(/CONFIDENCE: (\d+)%/);
+      const confidence = confidenceMatch ? parseInt(confidenceMatch[1]) / 100 : 0;
 
-      const exaAnalysis = await ExaSearchAPI.analyze(marketData.title);
-
-      const analysis = await marketAnalyst.execute('analyzeMarketData', {
-        searchResults,
-        financialData,
-        marketData,
-        exaAnalysis,
-      });
-
+      // Additional verification with GPT-4
       const gptVerification = await openai.chat.completions.create({
-        model: 'gpt-4-turbo',
+        model: 'gpt-4',
         messages: [
           {
             role: 'system',
-            content: 'You are a market resolution expert. Analyze the data and provide a final verdict.',
+            content: 'You are a market resolution expert. Verify the AI crew analysis and provide a final verdict.',
           },
           {
             role: 'user',
-            content: `Market: ${marketData.title}\nAnalysis: ${JSON.stringify(analysis)}\nExa Analysis: ${JSON.stringify(exaAnalysis)}`,
+            content: `Market: ${marketData.title}\nCrew Analysis: ${result}`,
           },
         ],
       });
 
-      const responseMessage = gptVerification.choices[0].message?.content || '';
-
       return {
-        outcome: analysis.confidence > 0.8,
-        confidence: analysis.confidence,
-        sources: analysis.sources,
-        verification: responseMessage,
+        outcome,
+        confidence,
+        crewAnalysis: result,
+        verification: gptVerification.choices[0].message?.content,
       };
     } catch (error) {
       console.error('Error resolving market:', error);
-      throw new Error('Failed to resolve market.');
-    }
-  }
-
-  static async generateMarkets() {
-    try {
-      const trendAnalyzer = crew.getAgent('TrendAnalyzer');
-      const marketAnalyst = crew.getAgent('MarketAnalyst');
-
-      const [twitterTrends, googleTrends] = await Promise.all([
-        trendAnalyzer.execute('getTwitterTrends'),
-        trendAnalyzer.execute('getGoogleTrends'),
-      ]);
-
-      const marketOpportunities = await marketAnalyst.execute('analyzeMarketOpportunities', {
-        twitterTrends,
-        googleTrends,
-      });
-
-      const refinedMarkets = await Promise.all(
-        marketOpportunities.map(async (market: any) => {
-          const completion = await openai.chat.completions.create({
-            model: 'gpt-4-turbo',
-            messages: [
-              {
-                role: 'system',
-                content: 'Create a clear, concise prediction market description.',
-              },
-              {
-                role: 'user',
-                content: `Topic: ${market.topic}\nContext: ${market.context}`,
-              },
-            ],
-          });
-
-          return {
-            ...market,
-            description: completion.choices[0].message?.content || '',
-          };
-        })
-      );
-
-      return refinedMarkets;
-    } catch (error) {
-      console.error('Error generating markets:', error);
-      throw new Error('Failed to generate market opportunities.');
+      throw new Error('Failed to resolve market');
     }
   }
 }

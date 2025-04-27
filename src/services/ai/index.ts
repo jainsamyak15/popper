@@ -1,135 +1,112 @@
-import { Configuration, OpenAIApi } from 'openai';
-import { Crew } from 'crewai-js';
-import { ExaSearchAPI } from './exa-search';
-import { YahooFinanceAPI } from './yahoo-finance';
-import { TwitterAPI } from './twitter-api';
-import { GoogleTrendsAPI } from './google-trends';
+import { Server } from 'stellar-sdk';
+import { Contract } from 'soroban-client';
+import { contractId, networkPassphrase, sorobanServer } from './config';
 
-// Initialize OpenAI
-const configuration = new Configuration({
-  apiKey: process.env.OPENAI_API_KEY!,
-});
-const openai = new OpenAIApi(configuration);
+export class StellarService {
+  private static contractId = 'CDRS7Q7KSH4KUUUBKLL2IYD4HQKNSIBVQ7BJCKC5RKPKUAVNP6D7G6QW';
+  private static contract = new Contract(this.contractId);
+  private static server = new Server('https://horizon-testnet.stellar.org');
 
-// Initialize Crew
-const crew = new Crew({
-  agents: [
-    {
-      name: 'DataCollector',
-      role: 'Collects and verifies data from multiple sources',
-      goal: 'Gather accurate and reliable information from various sources',
-      tools: [ExaSearchAPI, YahooFinanceAPI],
-    },
-    {
-      name: 'MarketAnalyst',
-      role: 'Analyzes market data and trends',
-      goal: 'Analyze market data and provide accurate predictions',
-      tools: [YahooFinanceAPI],
-    },
-    {
-      name: 'TrendAnalyzer',
-      role: 'Analyzes social media trends and news',
-      goal: 'Identify trending topics and potential market opportunities',
-      tools: [TwitterAPI, GoogleTrendsAPI],
-    },
-  ],
-});
-
-export class AIService {
-  static async resolveMarket(marketId: string, marketData: any) {
+  static async createMarket(
+    title: string,
+    description: string,
+    category: string,
+    endTime: number,
+  ) {
     try {
-      const task = crew.createTask({
-        description: `Analyze and resolve the prediction market: ${marketData.title}`,
-        expected_output: 'Boolean resolution (true/false) with confidence score',
-      });
+      const result = await this.contract.call(
+        'create_market',
+        title,
+        description,
+        category,
+        endTime,
+      );
 
-      const dataCollector = crew.getAgent('DataCollector');
-      const marketAnalyst = crew.getAgent('MarketAnalyst');
-
-      const [searchResults, financialData] = await Promise.all([
-        dataCollector.execute('searchRelevantData', { query: marketData.title }),
-        dataCollector.execute('getFinancialData', { query: marketData.title }),
-      ]);
-
-      const exaAnalysis = await ExaSearchAPI.analyze(marketData.title);
-
-      const analysis = await marketAnalyst.execute('analyzeMarketData', {
-        searchResults,
-        financialData,
-        marketData,
-        exaAnalysis,
-      });
-
-      const gptVerification = await openai.createChatCompletion({
-        model: 'gpt-4',
-        messages: [
-          {
-            role: 'system',
-            content: 'You are a market resolution expert. Analyze the data and provide a final verdict.',
-          },
-          {
-            role: 'user',
-            content: `Market: ${marketData.title}\nAnalysis: ${JSON.stringify(analysis)}\nExa Analysis: ${JSON.stringify(exaAnalysis)}`,
-          },
-        ],
-      });
-
-      const responseMessage = gptVerification.data.choices[0].message?.content || '';
-
-      return {
-        outcome: analysis.confidence > 0.8,
-        confidence: analysis.confidence,
-        sources: analysis.sources,
-        verification: responseMessage,
-      };
+      return result;
     } catch (error) {
-      console.error('Error resolving market:', error);
-      throw new Error('Failed to resolve market.');
+      console.error('Error creating market:', error);
+      throw error;
     }
   }
 
-  static async generateMarkets() {
+  static async placePrediction(
+    marketId: number,
+    prediction: boolean,
+    amount: string,
+    userPublicKey: string,
+  ) {
     try {
-      const trendAnalyzer = crew.getAgent('TrendAnalyzer');
-      const marketAnalyst = crew.getAgent('MarketAnalyst');
-
-      const [twitterTrends, googleTrends] = await Promise.all([
-        trendAnalyzer.execute('getTwitterTrends'),
-        trendAnalyzer.execute('getGoogleTrends'),
-      ]);
-
-      const marketOpportunities = await marketAnalyst.execute('analyzeMarketOpportunities', {
-        twitterTrends,
-        googleTrends,
-      });
-
-      const refinedMarkets = await Promise.all(
-        marketOpportunities.map(async (market: any) => {
-          const completion = await openai.createChatCompletion({
-            model: 'gpt-4',
-            messages: [
-              {
-                role: 'system',
-                content: 'Create a clear, concise prediction market description.',
-              },
-              {
-                role: 'user',
-                content: `Topic: ${market.topic}\nContext: ${market.context}`,
-              },
-            ],
-          });
-
-          return {
-            ...market,
-            description: completion.data.choices[0].message?.content || '',
-          };
-        })
+      const result = await this.contract.call(
+        'place_prediction',
+        marketId,
+        prediction,
+        amount,
       );
 
-      return refinedMarkets;
+      return result;
     } catch (error) {
-      console.error('Error generating markets:', error);
-      throw new Error('Failed to generate market opportunities.');
+      console.error('Error placing prediction:', error);
+      throw error;
+    }
+  }
+
+  static async resolveMarket(marketId: number, outcome: boolean) {
+    try {
+      const result = await this.contract.call(
+        'resolve_market',
+        marketId,
+        outcome,
+      );
+
+      return result;
+    } catch (error) {
+      console.error('Error resolving market:', error);
+      throw error;
+    }
+  }
+
+  static async claimWinnings(marketId: number, userPublicKey: string) {
+    try {
+      const result = await this.contract.call(
+        'claim_winnings',
+        marketId,
+      );
+
+      return result;
+    } catch (error) {
+      console.error('Error claiming winnings:', error);
+      throw error;
+    }
+  }
+
+  static async getMarket(marketId: number) {
+    try {
+      const result = await this.contract.call(
+        'get_market',
+        marketId,
+      );
+
+      return result;
+    } catch (error) {
+      console.error('Error getting market:', error);
+      throw error;
+    }
+  }
+
+  static async getMarkets() {
+    try {
+      const count = await this.contract.call('get_market_count');
+      const markets = [];
+
+      for (let i = 1; i <= count; i++) {
+        const market = await this.getMarket(i);
+        markets.push(market);
+      }
+
+      return markets;
+    } catch (error) {
+      console.error('Error getting markets:', error);
+      throw error;
     }
   }
 }

@@ -13,7 +13,7 @@ def validate_environment():
     """Validate that all required environment variables are set"""
     required_vars = [
         'OPENAI_API_KEY',
-        'BRAVE_API_KEY',
+        'SERPER_API_KEY',
     ]
 
     missing_vars = [var for var in required_vars if not os.getenv(var)]

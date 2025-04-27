@@ -2,8 +2,7 @@ from crewai import Agent, Crew, Process, Task
 from crewai.project import CrewBase, agent, crew, task
 from langchain_openai import ChatOpenAI
 from langchain.tools.yahoo_finance_news import YahooFinanceNewsTool
-from prism_crew.tools import BraveSearchTool
-
+from prism_crew.tools import SerperSearchTool
 
 @CrewBase
 class PrismCrew():
@@ -16,7 +15,7 @@ class PrismCrew():
         self.llm = ChatOpenAI(model="gpt-4")
         # Initialize tools
         self.tools = {
-            "brave_search": BraveSearchTool(),
+            "serper_search": SerperSearchTool(),
             "yahoo_finance": YahooFinanceNewsTool()
         }
 
@@ -25,14 +24,14 @@ class PrismCrew():
         return Agent(
             config=self.agents_config["researcher_one"],
             llm=self.llm,
-            tools=[self.tools["brave_search"], self.tools["yahoo_finance"]])
+            tools=[self.tools["serper_search"], self.tools["yahoo_finance"]])
 
     @agent
     def researcher_two(self) -> Agent:
         return Agent(
             config=self.agents_config["researcher_two"],
             llm=self.llm,
-            tools=[self.tools["brave_search"], self.tools["yahoo_finance"]])
+            tools=[self.tools["serper_search"], self.tools["yahoo_finance"]])
 
     @agent
     def consensus_builder(self) -> Agent:
