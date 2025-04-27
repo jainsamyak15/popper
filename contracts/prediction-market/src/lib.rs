@@ -1,24 +1,24 @@
 #![no_std]
 use soroban_sdk::{
-    contract, contractimpl, contracttype, Address, Env, Map, Symbol, Vec,
+    contract, contractimpl, contracttype, token::Client as TokenClient, Address, Env, Symbol, Vec,
 };
 
 #[contracttype]
 pub enum DataKey {
     Market(u32),
     MarketCount,
-    Resolution(u32),
     Position(Address, u32),
     TotalVolume,
     UserPositions(Address),
 }
 
 #[contracttype]
+#[derive(Clone)]
 pub struct Market {
     pub id: u32,
-    pub title: String,
-    pub description: String,
-    pub category: String,
+    pub title: Symbol,
+    pub description: Symbol,
+    pub category: Symbol,
     pub creator: Address,
     pub yes_pool: i128,
     pub no_pool: i128,
@@ -30,6 +30,7 @@ pub struct Market {
 }
 
 #[contracttype]
+#[derive(Clone)]
 pub struct Position {
     pub amount: i128,
     pub prediction: bool,
@@ -48,21 +49,24 @@ impl PredictionMarket {
     }
 
     pub fn create_market(
-        env: &Env,
+        env: Env,
+        creator: Address,
         title: Symbol,
         description: Symbol,
         category: Symbol,
         end_time: u64,
     ) -> u32 {
-        let creator = env.invoker();
-        let count: u32 = env.storage().instance().get(&DataKey::MarketCount).unwrap();
+        // Use the provided creator address instead of extracting from environment
+        creator.require_auth();
+
+        let count: u32 = env.storage().instance().get(&DataKey::MarketCount).unwrap_or(0);
         let new_count = count + 1;
 
         let market = Market {
             id: new_count,
-            title: title.to_string(),
-            description: description.to_string(),
-            category: category.to_string(),
+            title,
+            description,
+            category,
             creator: creator.clone(),
             yes_pool: 0,
             no_pool: 0,
@@ -80,127 +84,121 @@ impl PredictionMarket {
     }
 
     pub fn place_prediction(
-        env: &Env,
+        env: Env,
+        user: Address,
         market_id: u32,
         prediction: bool,
         amount: i128,
+        token_address: Address,
     ) {
-        let user = env.invoker();
-        let mut market: Market = env.storage().instance().get(&DataKey::Market(market_id)).unwrap();
-        
+        user.require_auth();
+
+        let market_key = DataKey::Market(market_id);
+        let mut market: Market = env.storage().instance().get(&market_key).expect("Market not found");
+
         assert!(!market.resolved, "Market already resolved");
         assert!(env.ledger().timestamp() < market.end_time, "Market closed");
         assert!(amount > 0, "Amount must be positive");
-        
-        // Transfer tokens from user to contract
-        let token = env.token();
-        token.transfer(&user, &env.current_contract_address(), &amount);
-        
-        // Calculate entry price based on current pools
-        let total_pool = market.yes_pool + market.no_pool;
-        let entry_price = if total_pool == 0 {
-            5000 // 50% if no liquidity
-        } else if prediction {
-            (market.yes_pool * 10000) / total_pool
+
+        let token_client = TokenClient::new(&env, &token_address);
+        token_client.transfer(&user, &env.current_contract_address(), &amount);
+
+        let (current_yes, current_no) = (market.yes_pool, market.no_pool);
+        let total_pool_before = current_yes + current_no;
+        let entry_price = if prediction {
+            if current_yes == 0 { 5000 } else { (current_yes * 10000).checked_div(total_pool_before).unwrap_or(5000) }
         } else {
-            (market.no_pool * 10000) / total_pool
+            if current_no == 0 { 5000 } else { (current_no * 10000).checked_div(total_pool_before).unwrap_or(5000) }
         };
-        
-        // Update market pools and stats
+
         if prediction {
             market.yes_pool += amount;
         } else {
             market.no_pool += amount;
         }
-        
         market.volume += amount;
-        market.participants += 1;
-        
-        // Update total volume
-        let total_volume: i128 = env.storage().instance().get(&DataKey::TotalVolume).unwrap();
+
+        let position_key = DataKey::Position(user.clone(), market_id);
+        if !env.storage().instance().has(&position_key) {
+             market.participants += 1;
+        }
+        let position = Position { amount, prediction, claimed: false, entry_price };
+        env.storage().instance().set(&position_key, &position);
+
+        let user_positions_key = DataKey::UserPositions(user.clone());
+        let mut user_positions: Vec<u32> = env.storage().instance().get(&user_positions_key).unwrap_or_else(|| Vec::new(&env));
+        if !user_positions.contains(market_id) {
+             user_positions.push_back(market_id);
+             env.storage().instance().set(&user_positions_key, &user_positions);
+        }
+
+        let total_volume: i128 = env.storage().instance().get(&DataKey::TotalVolume).unwrap_or(0);
         env.storage().instance().set(&DataKey::TotalVolume, &(total_volume + amount));
-        
-        // Store position
-        let position = Position {
-            amount,
-            prediction,
-            claimed: false,
-            entry_price,
-        };
-        
-        // Update user positions
-        let mut user_positions: Vec<u32> = env.storage()
-            .instance()
-            .get(&DataKey::UserPositions(user.clone()))
-            .unwrap_or(Vec::new(env));
-        user_positions.push_back(market_id);
-        
-        env.storage().instance().set(&DataKey::Position((user.clone(), market_id)), &position);
-        env.storage().instance().set(&DataKey::UserPositions(user), &user_positions);
-        env.storage().instance().set(&DataKey::Market(market_id), &market);
+
+        env.storage().instance().set(&market_key, &market);
     }
 
-    pub fn resolve_market(env: &Env, market_id: u32, outcome: bool) {
-        let market: Market = env.storage().instance().get(&DataKey::Market(market_id)).unwrap();
-        
-        // Only oracle (contract owner) can resolve
-        assert!(env.invoker() == env.current_contract_address(), "Unauthorized");
+    pub fn resolve_market(env: Env, resolver: Address, market_id: u32, outcome: bool) {
+        resolver.require_auth();
+
+        let market_key = DataKey::Market(market_id);
+        let mut market: Market = env.storage().instance().get(&market_key).expect("Market not found");
+
         assert!(!market.resolved, "Market already resolved");
-        assert!(env.ledger().timestamp() >= market.end_time, "Market not ended");
-        
-        let mut market = market;
+        assert!(env.ledger().timestamp() >= market.end_time, "Market not ended yet");
+
         market.resolved = true;
         market.outcome = outcome;
-        
-        env.storage().instance().set(&DataKey::Market(market_id), &market);
+
+        env.storage().instance().set(&market_key, &market);
     }
 
-    pub fn claim_winnings(env: &Env, market_id: u32) {
-        let user = env.invoker();
-        let market: Market = env.storage().instance().get(&DataKey::Market(market_id)).unwrap();
-        let position: Position = env.storage()
-            .instance()
-            .get(&DataKey::Position((user.clone(), market_id)))
-            .unwrap();
-            
-        assert!(market.resolved, "Market not resolved");
-        assert!(!position.claimed, "Already claimed");
-        
+    pub fn claim_winnings(env: Env, user: Address, market_id: u32, token_address: Address) {
+        user.require_auth();
+
+        let market: Market = env.storage().instance().get(&DataKey::Market(market_id)).expect("Market not found");
+        let position_key = DataKey::Position(user.clone(), market_id);
+        let mut position: Position = env.storage().instance().get(&position_key).expect("Position not found");
+
+        assert!(market.resolved, "Market not resolved yet");
+        assert!(!position.claimed, "Winnings already claimed");
+
         let winnings = if position.prediction == market.outcome {
             let total_pool = market.yes_pool + market.no_pool;
-            let winning_pool = if market.outcome {
-                market.yes_pool
-            } else {
-                market.no_pool
-            };
-            
-            (position.amount * total_pool) / winning_pool
+            let winning_pool = if market.outcome { market.yes_pool } else { market.no_pool };
+            if winning_pool == 0 { 0 } else { 
+                (position.amount.checked_mul(total_pool).unwrap_or(0))
+                    .checked_div(winning_pool)
+                    .unwrap_or(0)
+            }
         } else {
             0
         };
-        
+
         if winnings > 0 {
-            let token = env.token();
-            token.transfer(&env.current_contract_address(), &user, &winnings);
+            let token_client = TokenClient::new(&env, &token_address);
+            token_client.transfer(&env.current_contract_address(), &user, &winnings);
         }
-        
-        let mut position = position;
+
         position.claimed = true;
-        env.storage().instance().set(&DataKey::Position((user, market_id)), &position);
+        env.storage().instance().set(&position_key, &position);
     }
 
-    pub fn get_market(env: &Env, market_id: u32) -> Market {
-        env.storage().instance().get(&DataKey::Market(market_id)).unwrap()
+    // Read-only functions
+    pub fn get_market(env: Env, market_id: u32) -> Market {
+        env.storage().instance().get(&DataKey::Market(market_id)).expect("Market not found")
     }
 
-    pub fn get_user_positions(env: &Env, user: Address) -> Vec<u32> {
-        env.storage()
-            .instance()
-            .get(&DataKey::UserPositions(user))
-            .unwrap_or(Vec::new(env))
+    pub fn get_position(env: Env, user: Address, market_id: u32) -> Option<Position> {
+        let position_key = DataKey::Position(user, market_id);
+        env.storage().instance().get(&position_key)
     }
 
-    pub fn get_total_volume(env: &Env) -> i128 {
-        env.storage().instance().get(&DataKey::TotalVolume).unwrap()
+    pub fn get_user_positions(env: Env, user: Address) -> Vec<u32> {
+        env.storage().instance().get(&DataKey::UserPositions(user)).unwrap_or_else(|| Vec::new(&env))
+    }
+
+    pub fn get_total_volume(env: Env) -> i128 {
+        env.storage().instance().get(&DataKey::TotalVolume).unwrap_or(0)
     }
 }

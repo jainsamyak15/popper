@@ -16,6 +16,13 @@ import { marketsMock } from '@/lib/mocks/markets';
 import { MarketResolutionInfo } from '@/components/markets/market-resolution-info';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
+export async function generateStaticParams() {
+  // Generate static paths for all markets in the mock data
+  return marketsMock.map((market) => ({
+    id: market.id.toString(),
+  }));
+}
+
 export default function MarketPage() {
   const { id } = useParams();
   const [market, setMarket] = useState<any>(null);

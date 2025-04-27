@@ -1,0 +1,38 @@
+research_task:
+  description: >
+    As a research agent, thoroughly investigate this statement: {input_statement}
+
+    Your investigation should:
+    1. Use the provided search tools to gather recent and relevant information
+    2. Analyze the gathered information critically
+    3. Consider multiple perspectives and sources
+    4. Look for both supporting and contradicting evidence
+
+    Based on your research, determine if the statement is true or false.
+  expected_output: >
+    Provide a structured response with:
+    1. VERDICT: [TRUE/FALSE]
+    2. CONFIDENCE: [0-100%]
+    3. KEY FINDINGS: Bullet points of main evidence
+    4. REASONING: Detailed explanation of your conclusion
+    5. SOURCES: List of key sources consulted
+
+consensus_task:
+  description: >
+    As a consensus builder, analyze the research results from multiple agents regarding this statement: {input_statement}
+
+    Your task is to:
+    1. Review the verdicts and evidence from each researcher
+    2. Compare their confidence levels and reasoning
+    3. Identify areas of agreement and disagreement
+    4. Weigh the strength of evidence presented
+    5. Resolve any conflicts in the findings
+    6. Reach a final consensus
+  expected_output: >
+    Provide a structured consensus report:
+    1. FINAL VERDICT: [TRUE/FALSE]
+    2. CONSENSUS CONFIDENCE: [0-100%]
+    3. AGREEMENT ANALYSIS: How the research findings aligned or differed
+    4. SYNTHESIS: Combined key evidence from all sources
+    5. FINAL REASONING: Explanation of consensus decision
+    6. DISSENTING VIEWS: Note any significant disagreements (if any)

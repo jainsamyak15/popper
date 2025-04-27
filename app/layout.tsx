@@ -10,7 +10,7 @@ import { Footer } from '@/components/layout/footer';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'Probo Onchain - Prediction Markets on Stellar',
+  title: 'Popper - Prediction Markets on Stellar',
   description: 'Earn from your opinions on politics, sports, pop culture, crypto, and more with AI-powered on-chain prediction markets on Stellar.',
 };
 

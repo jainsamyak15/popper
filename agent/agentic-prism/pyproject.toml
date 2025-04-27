@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "prism_crew"
+version = "0.1.0"
+description = ""
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = ">=3.10.0,<3.13"
+crewai = { extras = ["tools"], version ="^0.28.8" }
+langchain = "^0.1.0"
+python-dotenv = "1.0.0"
+yfinance = "^0.2.38"
+
+[tool.poetry.scripts]
+prism_crew = "prism_crew.main:run"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

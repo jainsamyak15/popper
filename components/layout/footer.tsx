@@ -22,7 +22,7 @@ export function Footer() {
                   <span className="text-primary font-bold">P</span>
                 </div>
               </motion.div>
-              <span className="font-bold text-xl">Probo Onchain</span>
+              <span className="font-bold text-xl">Popper</span>
             </Link>
             <p className="text-sm text-muted-foreground mb-4">
               On-chain prediction markets on Stellar blockchain, powered by AI resolution.
@@ -149,7 +149,7 @@ export function Footer() {
         
         <div className="flex flex-col md:flex-row justify-between items-center">
           <p className="text-sm text-muted-foreground">
-            &copy; {currentYear} Probo Onchain. All rights reserved.
+            &copy; {currentYear} Popper. All rights reserved.
           </p>
           <p className="text-sm text-muted-foreground mt-2 md:mt-0">
             Built on <span className="text-primary">Stellar</span>

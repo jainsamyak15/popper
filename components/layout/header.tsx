@@ -57,7 +57,7 @@ export function Header() {
                   <span className="text-primary font-bold">P</span>
                 </div>
               </motion.div>
-              <span className="font-bold text-xl">Probo Onchain</span>
+              <span className="font-bold text-xl">Popper</span>
             </Link>
             
             <nav className="hidden md:flex ml-10 space-x-8">

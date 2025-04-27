@@ -52,7 +52,7 @@ export function HowItWorks() {
         >
           <h2 className="text-3xl font-bold mb-4">How It Works</h2>
           <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-            A simple guide to getting started with Probo Onchain prediction markets.
+            A simple guide to getting started with Popper prediction markets.
           </p>
         </motion.div>
         
