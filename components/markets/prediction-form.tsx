@@ -1,58 +1,82 @@
 'use client';
 
-import { useState } from 'react';
-import { motion } from 'framer-motion';
+import { useState, useEffect } from 'react';
 import { Check, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { useWallet } from '@/hooks/use-wallet';
 import { ConnectWalletButton } from '@/components/wallet/connect-wallet-button';
 import { toast } from 'sonner';
+import { useMarket } from '@/hooks/use-market';
 
 interface PredictionFormProps {
   market: any;
 }
 
 export function PredictionForm({ market }: PredictionFormProps) {
-  const { isConnected, balance } = useWallet();
+  const { isConnected, balance, refreshBalance } = useWallet();
+  const { placePrediction, predicting } = useMarket(market.id);
   const [prediction, setPrediction] = useState<'yes' | 'no'>('yes');
   const [amount, setAmount] = useState<number>(10);
-  const [potentialWinnings, setPotentialWinnings] = useState<number>(
-    prediction === 'yes' 
-      ? amount / market.yesPrice 
-      : amount / (1 - market.yesPrice)
-  );
-  
-  const handleSubmit = (e: React.FormEvent) => {
+  const [potentialWinnings, setPotentialWinnings] = useState<number>(0);
+  const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => {
+    setHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (hydrated) {
+      setPotentialWinnings(
+        prediction === 'yes'
+          ? amount / market.yesPrice
+          : amount / (1 - market.yesPrice)
+      );
+    }
+  }, [hydrated, prediction, amount, market.yesPrice]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Simulate transaction
-    toast.success(`Your ${prediction.toUpperCase()} prediction has been placed!`);
+
+    try {
+      if (balance < amount) {
+        toast.error('Insufficient balance');
+        return;
+      }
+
+      await placePrediction(prediction === 'yes', amount.toString());
+      await refreshBalance(); // Refresh wallet balance after placing prediction
+      toast.success('Prediction placed successfully');
+    } catch (error) {
+      console.error('Error placing prediction:', error);
+      toast.error('Failed to place prediction');
+    }
   };
-  
+
   const handlePredictionChange = (value: 'yes' | 'no') => {
     setPrediction(value);
-    // Recalculate potential winnings
-    setPotentialWinnings(
-      value === 'yes' 
-        ? amount / market.yesPrice 
-        : amount / (1 - market.yesPrice)
-    );
+    if (hydrated) {
+      setPotentialWinnings(
+        value === 'yes'
+          ? amount / market.yesPrice
+          : amount / (1 - market.yesPrice)
+      );
+    }
   };
-  
+
   const handleAmountChange = (value: number) => {
     setAmount(value);
-    // Recalculate potential winnings
-    setPotentialWinnings(
-      prediction === 'yes' 
-        ? value / market.yesPrice 
-        : value / (1 - market.yesPrice)
-    );
+    if (hydrated) {
+      setPotentialWinnings(
+        prediction === 'yes'
+          ? value / market.yesPrice
+          : value / (1 - market.yesPrice)
+      );
+    }
   };
-  
-  const formatXLM = (value: number) => {
-    return value.toFixed(2);
-  };
-  
+
+  const formatXLM = (value: number) => value.toFixed(2);
+
   if (!isConnected) {
     return (
       <div className="text-center">
@@ -61,7 +85,7 @@ export function PredictionForm({ market }: PredictionFormProps) {
       </div>
     );
   }
-  
+
   return (
     <form onSubmit={handleSubmit}>
       <div className="mb-6">
@@ -72,6 +96,7 @@ export function PredictionForm({ market }: PredictionFormProps) {
             variant={prediction === 'yes' ? 'default' : 'outline'}
             onClick={() => handlePredictionChange('yes')}
             className={prediction === 'yes' ? 'bg-chart-3 hover:bg-chart-3/90' : ''}
+            disabled={predicting}
           >
             <Check className="h-4 w-4 mr-2" />
             YES ({Math.round(market.yesPrice * 100)}%)
@@ -81,13 +106,14 @@ export function PredictionForm({ market }: PredictionFormProps) {
             variant={prediction === 'no' ? 'default' : 'outline'}
             onClick={() => handlePredictionChange('no')}
             className={prediction === 'no' ? 'bg-destructive hover:bg-destructive/90' : ''}
+            disabled={predicting}
           >
             <X className="h-4 w-4 mr-2" />
             NO ({Math.round((1 - market.yesPrice) * 100)}%)
           </Button>
         </div>
       </div>
-      
+
       <div className="mb-6">
         <div className="flex justify-between mb-3">
           <h4 className="text-sm font-medium">Amount (XLM)</h4>
@@ -95,7 +121,7 @@ export function PredictionForm({ market }: PredictionFormProps) {
             Balance: {formatXLM(balance)} XLM
           </span>
         </div>
-        
+
         <Slider
           defaultValue={[10]}
           max={Math.min(balance, 1000)}
@@ -103,25 +129,10 @@ export function PredictionForm({ market }: PredictionFormProps) {
           value={[amount]}
           onValueChange={(values) => handleAmountChange(values[0])}
           className="mb-4"
+          disabled={predicting}
         />
-        
-        <div className="flex justify-between gap-3">
-          {[10, 25, 50, 100].map((value) => (
-            <Button
-              key={value}
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => handleAmountChange(value)}
-              disabled={value > balance}
-              className="flex-1"
-            >
-              {value} XLM
-            </Button>
-          ))}
-        </div>
       </div>
-      
+
       <div className="p-4 bg-muted/30 rounded-lg mb-6">
         <div className="flex justify-between mb-2">
           <span className="text-sm text-muted-foreground">Amount</span>
@@ -142,9 +153,13 @@ export function PredictionForm({ market }: PredictionFormProps) {
           </span>
         </div>
       </div>
-      
-      <Button type="submit" className="w-full">
-        Place Prediction
+
+      <Button
+        type="submit"
+        className="w-full"
+        disabled={predicting || balance < amount}
+      >
+        {predicting ? 'Placing Prediction...' : 'Place Prediction'}
       </Button>
     </form>
   );

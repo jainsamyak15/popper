@@ -1,10 +1,10 @@
-import { Server } from 'stellar-sdk';
+import Server from 'stellar-sdk';
 import { Contract } from 'soroban-client';
 import { contractId, networkPassphrase, sorobanServer } from './config';
 
 export class StellarService {
   private static contract = new Contract(contractId);
-  private static server = new Server('https://horizon-testnet.stellar.org');
+  private static server = sorobanServer
 
   static async createMarket(
     title: string,
