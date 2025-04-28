@@ -1,6 +1,6 @@
 #![no_std]
 use soroban_sdk::{
-    contract, contractimpl, contracttype, token::Client as TokenClient, Address, Env, Symbol, Vec,
+    contract, contractimpl, contracttype, Address, Env, Symbol, Vec,
 };
 
 #[contracttype]
@@ -56,7 +56,6 @@ impl PredictionMarket {
         category: Symbol,
         end_time: u64,
     ) -> u32 {
-        // Use the provided creator address instead of extracting from environment
         creator.require_auth();
 
         let count: u32 = env.storage().instance().get(&DataKey::MarketCount).unwrap_or(0);
@@ -89,7 +88,6 @@ impl PredictionMarket {
         market_id: u32,
         prediction: bool,
         amount: i128,
-        token_address: Address,
     ) {
         user.require_auth();
 
@@ -99,9 +97,6 @@ impl PredictionMarket {
         assert!(!market.resolved, "Market already resolved");
         assert!(env.ledger().timestamp() < market.end_time, "Market closed");
         assert!(amount > 0, "Amount must be positive");
-
-        let token_client = TokenClient::new(&env, &token_address);
-        token_client.transfer(&user, &env.current_contract_address(), &amount);
 
         let (current_yes, current_no) = (market.yes_pool, market.no_pool);
         let total_pool_before = current_yes + current_no;
@@ -153,7 +148,7 @@ impl PredictionMarket {
         env.storage().instance().set(&market_key, &market);
     }
 
-    pub fn claim_winnings(env: Env, user: Address, market_id: u32, token_address: Address) {
+    pub fn claim_result(env: Env, user: Address, market_id: u32) -> bool {
         user.require_auth();
 
         let market: Market = env.storage().instance().get(&DataKey::Market(market_id)).expect("Market not found");
@@ -161,27 +156,14 @@ impl PredictionMarket {
         let mut position: Position = env.storage().instance().get(&position_key).expect("Position not found");
 
         assert!(market.resolved, "Market not resolved yet");
-        assert!(!position.claimed, "Winnings already claimed");
+        assert!(!position.claimed, "Result already claimed");
 
-        let winnings = if position.prediction == market.outcome {
-            let total_pool = market.yes_pool + market.no_pool;
-            let winning_pool = if market.outcome { market.yes_pool } else { market.no_pool };
-            if winning_pool == 0 { 0 } else { 
-                (position.amount.checked_mul(total_pool).unwrap_or(0))
-                    .checked_div(winning_pool)
-                    .unwrap_or(0)
-            }
-        } else {
-            0
-        };
-
-        if winnings > 0 {
-            let token_client = TokenClient::new(&env, &token_address);
-            token_client.transfer(&env.current_contract_address(), &user, &winnings);
-        }
-
+        let won = position.prediction == market.outcome;
+        
         position.claimed = true;
         env.storage().instance().set(&position_key, &position);
+        
+        won
     }
 
     // Read-only functions
