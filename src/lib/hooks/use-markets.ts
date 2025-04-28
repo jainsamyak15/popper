@@ -1,8 +1,8 @@
 'use strict';
 
 import { useState, useEffect } from 'react';
-import { AIService } from '@/services/ai';
-import { StellarService } from '@/services/stellar';
+import { AIService } from '@/src/services/ai';
+import { StellarService } from '@/src/services/stellar';
 import { toast } from 'sonner';
 
 export function useMarkets() {

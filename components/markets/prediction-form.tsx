@@ -14,7 +14,7 @@ interface PredictionFormProps {
 }
 
 export function PredictionForm({ market }: PredictionFormProps) {
-  const { isConnected, balance, refreshBalance } = useWallet();
+  const { isConnected, balance } = useWallet();
   const { placePrediction, predicting } = useMarket(market.id);
   const [prediction, setPrediction] = useState<'yes' | 'no'>('yes');
   const [amount, setAmount] = useState<number>(10);
@@ -44,8 +44,7 @@ export function PredictionForm({ market }: PredictionFormProps) {
         return;
       }
 
-      await placePrediction(prediction === 'yes', amount.toString());
-      await refreshBalance(); // Refresh wallet balance after placing prediction
+      await placePrediction(prediction === 'yes', amount.toString()); // Refresh wallet balance after placing prediction
       toast.success('Prediction placed successfully');
     } catch (error) {
       console.error('Error placing prediction:', error);

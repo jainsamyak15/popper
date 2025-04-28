@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { StellarService } from '@/services/stellar';
+import { StellarService } from '@/src/services/stellar';
 import { AIService } from '@/services/ai';
-import { useWallet } from './use-wallet';
+import { useWallet } from '@/hooks/use-wallet';
 import { toast } from 'sonner';
 
 export function useMarket(marketId?: string) {

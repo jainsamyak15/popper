@@ -21,7 +21,6 @@ export function useMarket(marketId?: string) {
   const fetchMarketData = async () => {
     try {
       setLoading(true);
-      // Fetch market data from smart contract
       const data = await StellarService.getMarket(Number(marketId));
       setMarket(data);
     } catch (error) {
@@ -43,6 +42,7 @@ export function useMarket(marketId?: string) {
         amount,
         address
       );
+      
       toast.success('Prediction placed successfully');
       await fetchMarketData();
     } catch (error) {
