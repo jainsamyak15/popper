@@ -37,14 +37,17 @@ export function PredictionForm({ market }: PredictionFormProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
+  
     try {
       if (balance < amount) {
         toast.error('Insufficient balance');
         return;
       }
-
-      await placePrediction(prediction === 'yes', amount.toString()); // Refresh wallet balance after placing prediction
+  
+      // Call the `placePrediction` function and wait for the transaction to complete
+      const response = await placePrediction(prediction === 'yes', amount.toString());
+  
+      // If the transaction is successful, show the success toast
       toast.success('Prediction placed successfully');
     } catch (error) {
       console.error('Error placing prediction:', error);
