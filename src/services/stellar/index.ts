@@ -17,8 +17,8 @@ export class StellarService {
   private static markets = [
     {
       id: 1,
-      title: 'Will Bitcoin reach $100,000 by end of 2024?',
-      description: 'Market for predicting if Bitcoin will reach $100,000 by the end of 2024',
+      title: 'Will Bitcoin reach $100,000 by end of 2025?',
+      description: 'Market for predicting if Bitcoin will reach $100,000 by the end of 2025',
       category: 'crypto',
       endTime: Date.now() + 604800000, // 1 week from now
       resolved: true, // This market is resolved
